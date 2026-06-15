@@ -88,6 +88,20 @@ pytest --alluredir=reports/allure-results
 allure serve reports/allure-results
 ```
 
+## Запись видео
+
+Включается переменной окружения `VIDEO=true` в `.env` — видео сохраняются в `reports/videos/`.
+
+```bash
+# записать видео для всех UI-тестов
+VIDEO=true pytest -m ui
+
+# или записать только упавшие (через флаг Playwright)
+pytest -m ui --video=retain-on-failure --output=reports/videos
+```
+
+Формат файлов — `.webm`, открываются в браузере или любом видеоплеере.
+
 ## Покрытие
 
 ### API (42 теста)

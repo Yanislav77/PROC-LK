@@ -9,3 +9,4 @@ API_V1_URL = API_V4_URL.replace("/v4", "/v1")
 TEST_USER_EMAIL = os.getenv("TEST_USER_EMAIL", "")
 TEST_USER_PASSWORD = os.getenv("TEST_USER_PASSWORD", "")
 HEADLESS = os.getenv("HEADLESS", "true").lower() == "true"
+VIDEO = os.getenv("VIDEO", "false").lower() == "true"
