@@ -6,6 +6,9 @@ class BasePage:
     def __init__(self, page: Page):
         self.page = page
         self.base_url = BASE_URL
+        # ленивый импорт чтобы избежать циклических зависимостей
+        from pages.components.sidebar import Sidebar
+        self.sidebar = Sidebar(page)
 
     def navigate(self, path: str = ""):
         self.page.goto(f"{self.base_url}{path}")

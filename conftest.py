@@ -1,5 +1,4 @@
 import pytest
-from playwright.sync_api import Browser, BrowserContext, Page
 from utils.config import HEADLESS, TEST_USER_EMAIL, TEST_USER_PASSWORD
 from api_clients.auth_client import AuthClient
 

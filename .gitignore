@@ -11,3 +11,5 @@ venv/
 .idea/
 *.png
 explore_ui*.py
+reports/*
+!reports/.gitkeep
