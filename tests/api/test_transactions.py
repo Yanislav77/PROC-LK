@@ -46,6 +46,61 @@ class TestTransactionsList:
 
 
 @pytest.mark.api
+class TestTransactionNewParams:
+    @pytest.fixture(autouse=True)
+    def setup(self, auth_client):
+        self.client = make_client(auth_client)
+
+    def test_filter_by_payment_method_card(self):
+        response = self.client.get_transactions(
+            created_range="2026-06-08T00:00:00.000,2026-06-15T23:59:59.999",
+            payment_method="Card",
+        )
+        assert response.status_code == 200
+
+    def test_filter_by_payment_method_p2p(self):
+        response = self.client.get_transactions(
+            created_range="2026-06-08T00:00:00.000,2026-06-15T23:59:59.999",
+            payment_method="P2P",
+        )
+        assert response.status_code == 200
+
+    def test_filter_by_payed_range(self):
+        response = self.client.get_transactions(
+            payed_range="2026-06-08T00:00:00.000,2026-06-15T23:59:59.999",
+        )
+        assert response.status_code == 200
+
+    def test_filter_by_type_payout(self):
+        response = self.client.get_transactions(
+            created_range="2026-06-08T00:00:00.000,2026-06-15T23:59:59.999",
+            type_in="payout",
+        )
+        assert response.status_code == 200
+
+    def test_response_contains_p2p_bankdetails(self):
+        response = self.client.get_transactions(
+            created_range="2026-06-08T00:00:00.000,2026-06-15T23:59:59.999",
+        )
+        results = BaseClient.unwrap(response).get("results", [])
+        if not results:
+            pytest.skip("No transactions in date range")
+        tx = results[0]
+        assert "p2p_bankdetails" in tx
+        assert "accountNumber" in tx["p2p_bankdetails"]
+        assert "phoneNumber" in tx["p2p_bankdetails"]
+
+    def test_response_contains_payment_method(self):
+        response = self.client.get_transactions(
+            created_range="2026-06-08T00:00:00.000,2026-06-15T23:59:59.999",
+        )
+        results = BaseClient.unwrap(response).get("results", [])
+        if not results:
+            pytest.skip("No transactions in date range")
+        assert "payment_method" in results[0]
+
+
+@pytest.mark.api
 @pytest.mark.smoke
 class TestTransactionFilters:
     @pytest.fixture(autouse=True)
