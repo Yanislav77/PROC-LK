@@ -9,3 +9,5 @@ allure-results/
 venv/
 *.har
 .idea/
+*.png
+explore_ui*.py
