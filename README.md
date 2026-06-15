@@ -5,22 +5,38 @@
 ## Стек
 
 | Слой | Инструмент |
-|------|-----------|
+|---|---|
 | UI / E2E | Playwright + pytest-playwright |
 | API | requests |
 | Раннер | pytest |
 | Отчёты | Allure |
+| XLSX-парсинг | openpyxl |
 
 ## Структура проекта
 
 ```
 PROC-LK/
-├── api_clients/          # HTTP-клиенты (auth, transactions)
+├── api_clients/          # HTTP-клиенты
+│   ├── base_client.py
+│   ├── auth_client.py
+│   ├── transactions_client.py
+│   ├── exports_client.py
+│   └── account_client.py
 ├── pages/                # Page Object Model
-│   └── components/       # переиспользуемые UI-компоненты (sidebar)
+│   ├── components/       # переиспользуемые компоненты (sidebar)
+│   ├── login_page.py
+│   ├── transactions_page.py
+│   └── transaction_detail_page.py
 ├── tests/
 │   ├── api/              # API-тесты
+│   │   ├── test_auth.py
+│   │   ├── test_transactions.py
+│   │   ├── test_account_services.py
+│   │   ├── test_exports.py
+│   │   └── test_transaction_actions.py
 │   └── ui/               # UI / E2E тесты
+│       ├── test_login.py
+│       └── test_transactions.py
 ├── fixtures/             # тестовые данные
 ├── utils/                # конфигурация
 ├── reports/              # Allure-отчёты (gitignored)
@@ -74,13 +90,27 @@ allure serve reports/allure-results
 
 ## Покрытие
 
-### API (9 тестов)
-- **Auth** — логин, неверный пароль, отсутствие логина
-- **Transactions** — список с фильтром по дате, пагинация, поля ответа
-- **Filters** — партнёры, сервисы, статусы
+### API (42 теста)
+
+| Модуль | Тесты | Описание |
+|---|---|---|
+| **Auth** | 3 | логин, неверный пароль, отсутствие логина |
+| **Transactions** | 12 | список, пагинация, фильтры, `payment_method`, `p2p_bankdetails`, `payed_range` |
+| **Account Services** | 7 | `POST /api/v4/account/services/` — терминалы по партнёрам, структура ответа, edge cases |
+| **Exports** | 12 | создание CSV/XLSX, опрос статуса, скачивание, проверка колонок `Terminal ID` / `Terminal name` |
+| **Transaction Actions** | 8 | возврат, отправка вебхука, запрос статуса — успех и ошибки |
 
 ### UI (16 тестов)
-- **Login** — успешный вход, неверные креды, ссылка «Забыли пароль»
-- **Transactions** — загрузка таблицы, табы, кнопки экспорта, фильтры
-- **Navigation** — сайдбар, переходы между страницами
-- **Transaction detail** — открытие по клику, валидация URL
+
+| Модуль | Тесты | Описание |
+|---|---|---|
+| **Login** | 4 | успешный вход, неверные креды, ссылка «Забыли пароль» |
+| **Transactions** | 9 | загрузка таблицы, табы, кнопки экспорта, фильтры, детализация |
+| **Navigation** | 3 | сайдбар, переходы между страницами |
+
+## Известные расхождения с документацией
+
+| Эндпоинт | Документация | Факт |
+|---|---|---|
+| `POST /api/v4/exports/` | статус `200` | возвращает `201` |
+| `GET /api/v4/exports/{id}/` | статусы `RUNNING / DONE / FAILED` | также бывает `PENDING` |
