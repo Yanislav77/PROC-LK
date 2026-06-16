@@ -1,21 +1,49 @@
-import re
-import shutil
-import subprocess
+import threading
 import time
 from pathlib import Path
 import pytest
-from utils.config import HEADLESS, VIDEO, TEST_USER_EMAIL, TEST_USER_PASSWORD
+from utils.config import BASE_URL, HEADLESS, VIDEO, TEST_USER_EMAIL, TEST_USER_PASSWORD
 from api_clients.auth_client import AuthClient
 
 VIDEO_DIR = Path("reports/videos")
 
-# Видео текущего прогона в порядке выполнения тестов
-_session_videos: list[Path] = []
+# (src, dst) — собирается в хуке, переименование выполняется в sessionfinish
+_pending_renames: list[tuple[Path, Path]] = []
+
+
+def _do_login_and_save(state_file: Path):
+    """Запускается в отдельном потоке — вне asyncio-цикла pytest-playwright."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=HEADLESS)
+        ctx = browser.new_context()
+        page = ctx.new_page()
+        page.goto(f"{BASE_URL}/login")
+        page.locator("input[name=username]").fill(TEST_USER_EMAIL)
+        page.locator("input[name=password]").fill(TEST_USER_PASSWORD)
+        page.locator("button[type=submit]").click()
+        page.wait_for_url("**/dashboard**")
+        ctx.storage_state(path=str(state_file))
+        browser.close()
 
 
 @pytest.fixture(scope="session")
-def browser_context_args(browser_context_args):
-    args = {**browser_context_args, "viewport": {"width": 1440, "height": 900}}
+def _auth_state_path(tmp_path_factory):
+    """Логинится один раз, сохраняет cookies/localStorage в файл."""
+    state_file = tmp_path_factory.mktemp("auth") / "state.json"
+    t = threading.Thread(target=_do_login_and_save, args=(state_file,))
+    t.start()
+    t.join()
+    return str(state_file)
+
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args, _auth_state_path):
+    args = {
+        **browser_context_args,
+        "viewport": {"width": 1440, "height": 900},
+        "storage_state": _auth_state_path,
+    }
     if VIDEO:
         VIDEO_DIR.mkdir(parents=True, exist_ok=True)
         args["record_video_dir"] = str(VIDEO_DIR)
@@ -25,7 +53,7 @@ def browser_context_args(browser_context_args):
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Переименовывает видео после полного закрытия контекста (when=teardown)."""
+    """Собирает пары (src, dst) для переименования — сам рейминг в sessionfinish."""
     outcome = yield
     report = outcome.get_result()
     if report.when != "teardown":
@@ -36,43 +64,22 @@ def pytest_runtest_makereport(item, call):
         return
     src = Path(src_str)
     dst = src.parent / f"{name}.webm"
-    for _ in range(20):
-        if src.exists():
-            try:
-                src.replace(dst)   # replace() перезаписывает существующий файл на Windows
-                _session_videos.append(dst)
-            except OSError:
-                pass
-            break
-        time.sleep(0.1)
+    _pending_renames.append((src, dst))
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """После прогона склеивает все видео текущей сессии в один файл."""
-    if not VIDEO or len(_session_videos) < 2:
+    """После всех тестов переименовывает видеофайлы из хэшей в имена тестов."""
+    if not VIDEO:
         return
-    if not shutil.which("ffmpeg"):
-        print("\nffmpeg не найден — склейка видео пропущена.")
-        return
-
-    filelist = VIDEO_DIR / "_filelist.txt"
-    filelist.write_text(
-        "\n".join(f"file '{p.resolve()}'" for p in _session_videos),
-        encoding="utf-8",
-    )
-
-    output = VIDEO_DIR / "all_tests.webm"
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-         "-i", str(filelist), "-c", "copy", str(output)],
-        capture_output=True,
-    )
-    filelist.unlink(missing_ok=True)
-
-    if result.returncode == 0:
-        print(f"\nВидео сессии сохранено: {output}")
-    else:
-        print(f"\nОшибка склейки видео: {result.stderr.decode()}")
+    for src, dst in _pending_renames:
+        for _ in range(100):          # ждём до 10 секунд финализации файла
+            if src.exists():
+                try:
+                    src.replace(dst)
+                except OSError:
+                    time.sleep(0.3)
+                break
+            time.sleep(0.1)
 
 
 @pytest.fixture(scope="session")

@@ -44,12 +44,42 @@ class TransactionsPage(BasePage):
         self.refund_btn = page.get_by_role("button", name="Возврат")
         self.send_webhook_btn = page.get_by_role("button", name="Отправить вебхук")
         self.request_status_btn = page.get_by_role("button", name="Запросить статус")
+        # Date range inputs (MUI DatePicker v6 — сегментированный ввод)
+        _date_inputs = page.locator(".MuiPickersInputBase-input")
+        self.date_from_input = _date_inputs.nth(0)
+        self.date_to_input = _date_inputs.nth(1)
+        _date_containers = page.locator(".MuiPickersOutlinedInput-root")
+        self.date_from_container = _date_containers.nth(0)
+        self.date_to_container = _date_containers.nth(1)
 
     def open(self):
         self.navigate(self.URL)
 
     def get_row_count(self) -> int:
         return self.rows.count()
+
+    def apply_filters(self):
+        self.apply_btn.click()
+        self.page.wait_for_load_state("networkidle")
+
+    def clear_filters(self):
+        self.clear_btn.click()
+        self.page.wait_for_load_state("networkidle")
+
+    def set_date_range(self, date_from: str, date_to: str):
+        """Заполнить поля диапазона дат. Формат: 'дд.мм.гггг'.
+
+        MUI DatePicker v6: click container, Home → переходим к секции дня,
+        затем type digits (auto-advance по секциям).
+        """
+        from_digits = date_from.replace(".", "")
+        to_digits = date_to.replace(".", "")
+        self.date_from_container.click()
+        self.page.keyboard.press("Home")
+        self.page.keyboard.type(from_digits)
+        self.date_to_container.click()
+        self.page.keyboard.press("Home")
+        self.page.keyboard.type(to_digits)
 
     def click_transaction(self, index: int = 0):
         self.transaction_links.nth(index).click()

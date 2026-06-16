@@ -100,7 +100,7 @@ VIDEO=true pytest -m ui
 pytest -m ui --video=retain-on-failure --output=reports/videos
 ```
 
-Формат файлов — `.webm`, открываются в браузере или любом видеоплеере.
+**Формат файлов — `.webm`, открываются в браузере или любом видеоплеере.**
 
 ## Покрытие
 

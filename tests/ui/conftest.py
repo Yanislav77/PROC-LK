@@ -3,7 +3,17 @@ import pytest
 from playwright.sync_api import Page
 from pages.login_page import LoginPage
 from pages.transactions_page import TransactionsPage
-from utils.config import TEST_USER_EMAIL, TEST_USER_PASSWORD, VIDEO
+from utils.config import BASE_URL, TEST_USER_EMAIL, TEST_USER_PASSWORD, VIDEO
+
+
+def _ensure_authenticated(page: Page) -> None:
+    """Если сессия инвалидирована (редирект на /login) — логинимся заново."""
+    if "/login" in page.url:
+        page.locator("input[name=username]").fill(TEST_USER_EMAIL)
+        page.locator("input[name=password]").fill(TEST_USER_PASSWORD)
+        page.locator("button[type=submit]").click()
+        page.wait_for_url("**/dashboard**")
+        page.wait_for_load_state("networkidle")
 
 
 @pytest.fixture(autouse=True)
@@ -33,17 +43,21 @@ def login_page(page: Page) -> LoginPage:
 
 @pytest.fixture
 def authenticated_page(page: Page) -> Page:
-    lp = LoginPage(page)
-    lp.open()
-    lp.login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
-    page.wait_for_url("**/dashboard**")
+    page.goto(f"{BASE_URL}/dashboard")
     page.wait_for_load_state("networkidle")
+    _ensure_authenticated(page)
     return page
 
 
 @pytest.fixture
-def transactions_page(authenticated_page: Page) -> TransactionsPage:
-    tp = TransactionsPage(authenticated_page)
+def transactions_page(page: Page) -> TransactionsPage:
+    tp = TransactionsPage(page)
     tp.open()
-    authenticated_page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("networkidle")
+    _ensure_authenticated(page)
+    # После повторного логина оказываемся на dashboard — возвращаемся к транзакциям
+    if "/transactions" not in page.url:
+        tp.open()
+        page.wait_for_load_state("networkidle")
+    tp.rows.first.wait_for(state="visible", timeout=30000)
     return tp
