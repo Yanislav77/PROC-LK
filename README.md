@@ -123,9 +123,13 @@ VIDEO=true pytest -m ui
 $env:VIDEO="true"; pytest -m ui
 ```
 
-Файлы именуются по имени теста, например:
+Каждый прогон создаёт свою папку с тем же timestamp, что и отчёт:
 ```
-reports/videos/TestTransactionsTabs__test_switch_to_payouts_tab.webm
+reports/
+├── report_2026-06-16_17-25-43.html
+└── videos/
+    └── 2026-06-16_17-25-43/
+        └── TestTransactionsTabs__test_switch_to_payouts_tab.webm
 ```
 
 ---
