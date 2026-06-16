@@ -7,13 +7,14 @@ from utils.config import BASE_URL, HEADLESS, VIDEO, TEST_USER_EMAIL, TEST_USER_P
 from api_clients.auth_client import AuthClient
 
 
+_RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+VIDEO_DIR = Path(f"reports/videos/{_RUN_TIMESTAMP}")
+
+
 def pytest_configure(config):
     if getattr(config.option, "htmlpath", None):
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         Path("reports").mkdir(parents=True, exist_ok=True)
-        config.option.htmlpath = f"reports/report_{timestamp}.html"
-
-VIDEO_DIR = Path("reports/videos")
+        config.option.htmlpath = f"reports/report_{_RUN_TIMESTAMP}.html"
 
 # (src, dst) — собирается в хуке, переименование выполняется в sessionfinish
 _pending_renames: list[tuple[Path, Path]] = []
