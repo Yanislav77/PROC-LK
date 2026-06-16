@@ -1,4 +1,5 @@
 import base64
+import html as _html
 import re
 from pathlib import Path
 
@@ -43,7 +44,7 @@ def pytest_runtest_makereport(item, call):
 
     description = (item.function.__doc__ or "").strip()
     if description:
-        report.extras.insert(0, pytest_html.extras.text(description, name="Описание"))
+        report.extras.insert(0, pytest_html.extras.html(f"<p>{_html.escape(description)}</p>"))
 
     if not report.failed:
         return
