@@ -53,9 +53,12 @@ def browser_context_args(browser_context_args, _auth_state_path):
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Собирает пары (src, dst) для переименования — сам рейминг в sessionfinish."""
+    """Сохраняет report на ноде (для фикстур) и собирает видео для переименования."""
     outcome = yield
     report = outcome.get_result()
+    # Сохраняем rep_call / rep_setup / rep_teardown на ноде, чтобы фикстуры
+    # могли проверить, упал ли тест (используется для скриншотов при падении).
+    setattr(item, f"rep_{report.when}", report)
     if report.when != "teardown":
         return
     src_str = getattr(item, "_video_src", None)
