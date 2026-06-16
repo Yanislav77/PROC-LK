@@ -77,10 +77,10 @@ pytest -m ui
 pytest -m smoke
 
 # конкретный файл
-pytest tests/ui/test_transactions_filters.py
+pytest tests/ui/transactions/test_transactions_filters.py
 
 # конкретный тест
-pytest tests/ui/test_transactions_filters.py::TestFilterControls::test_filter_label_status_visible
+pytest tests/ui/transactions/test_transactions_filters.py::TestFilterControls::test_filter_label_status_visible
 ```
 
 ---
@@ -151,20 +151,22 @@ PROC-LK/
 │   │   └── test_transaction_actions.py
 │   │
 │   └── ui/                   # UI / E2E тесты
-│       ├── conftest.py        # фикстуры, скриншоты на падение
+│       ├── conftest.py        # общие фикстуры: login_page, authenticated_page, скриншоты на падение
 │       ├── test_login.py
-│       ├── test_transactions.py              # загрузка, табы, навигация
-│       ├── test_transactions_filters.py      # видимость и контролы фильтров
-│       ├── test_transactions_dropdown_content.py  # содержимое dropdown-ов
-│       ├── test_transactions_date_picker.py       # датапикеры
-│       ├── test_transactions_filter_application.py  # применение фильтров
-│       ├── test_transactions_filter_network.py      # сетевые запросы (базовые)
-│       ├── test_transactions_filter_network_extended.py  # запросы метод/режим/тип даты
-│       ├── test_transactions_table_structure.py    # заголовки и данные таблицы
-│       ├── test_transactions_pagination.py         # пагинация
-│       ├── test_transactions_export.py             # экспорт CSV/XLSX
-│       ├── test_transactions_action_buttons.py     # кнопки действий
-│       └── test_transactions_detail.py             # страница детализации
+│       └── transactions/      # все тесты страницы транзакций
+│           ├── conftest.py    # фикстура transactions_page
+│           ├── test_transactions.py              # загрузка, табы, навигация
+│           ├── test_transactions_filters.py      # видимость и контролы фильтров
+│           ├── test_transactions_dropdown_content.py  # содержимое dropdown-ов
+│           ├── test_transactions_date_picker.py       # датапикеры
+│           ├── test_transactions_filter_application.py  # применение фильтров
+│           ├── test_transactions_filter_network.py      # сетевые запросы (базовые)
+│           ├── test_transactions_filter_network_extended.py  # запросы метод/режим/тип даты
+│           ├── test_transactions_table_structure.py    # заголовки и данные таблицы
+│           ├── test_transactions_pagination.py         # пагинация
+│           ├── test_transactions_export.py             # экспорт CSV/XLSX
+│           ├── test_transactions_action_buttons.py     # кнопки действий
+│           └── test_transactions_detail.py             # страница детализации
 │
 ├── utils/
 │   └── config.py             # загрузка переменных из .env
@@ -207,7 +209,7 @@ PROC-LK/
 | **Структура таблицы** | заголовки 10 столбцов, статус/режим/даты в строках, ссылки с ID |
 | **Пагинация** | дефолт size=10, `size=25/50/100` в запросах, переключение страниц |
 | **Экспорт** | кнопки CSV/XLSX видимы и активны, оба шлют POST на один endpoint |
-| **Кнопки действий** | Обновить статус / Повторить запрос / Возврат — видимы и disabled без выбора |
+| **Кнопки действий** | Запросить статус / Отправить вебхук / Возврат — видимы и disabled без выбора |
 | **Детализация** | заголовок, секции, кнопка «Назад», кнопки действий |
 
 ---

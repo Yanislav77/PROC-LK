@@ -7,7 +7,6 @@ import pytest_html
 from playwright.sync_api import Page
 
 from pages.login_page import LoginPage
-from pages.transactions_page import TransactionsPage
 from utils.config import BASE_URL, TEST_USER_EMAIL, TEST_USER_PASSWORD, VIDEO
 
 SCREENSHOTS_DIR = Path("reports/screenshots")
@@ -83,14 +82,3 @@ def authenticated_page(page: Page) -> Page:
     return page
 
 
-@pytest.fixture
-def transactions_page(page: Page) -> TransactionsPage:
-    tp = TransactionsPage(page)
-    tp.open()
-    page.wait_for_load_state("networkidle")
-    _ensure_authenticated(page)
-    if "/transactions" not in page.url:
-        tp.open()
-        page.wait_for_load_state("networkidle")
-    tp.rows.first.wait_for(state="visible", timeout=30000)
-    return tp
