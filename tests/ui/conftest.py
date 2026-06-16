@@ -32,11 +32,20 @@ def _ensure_authenticated(page: Page) -> None:
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Делает скриншот при падении UI-теста и прикрепляет к HTML-отчёту."""
+    """Описание теста и скриншот при падении — прикрепляет к HTML-отчёту."""
     outcome = yield
     report = outcome.get_result()
 
-    if report.when != "call" or not report.failed:
+    if report.when != "call":
+        return
+
+    report.extras = getattr(report, "extras", [])
+
+    description = (item.function.__doc__ or "").strip()
+    if description:
+        report.extras.insert(0, pytest_html.extras.text(description, name="Описание"))
+
+    if not report.failed:
         return
     page: Page = item.funcargs.get("page")
     if page is None:
@@ -46,7 +55,6 @@ def pytest_runtest_makereport(item, call):
         path = SCREENSHOTS_DIR / f"{_safe_name(item.nodeid)}.png"
         raw = page.screenshot(path=str(path), full_page=True)
         b64 = base64.b64encode(raw).decode("utf-8")
-        report.extras = getattr(report, "extras", [])
         report.extras.append(
             pytest_html.extras.image(f"data:image/png;base64,{b64}", name="screenshot")
         )
