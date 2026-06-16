@@ -1,3 +1,4 @@
+"""Тесты формы входа."""
 import pytest
 from playwright.sync_api import expect
 from pages.login_page import LoginPage
@@ -13,22 +14,28 @@ def browser_context_args(browser_context_args):
 @pytest.mark.ui
 @pytest.mark.smoke
 class TestLogin:
+    """Сценарии аутентификации: успешный вход, ошибки, элементы формы."""
+
     def test_successful_login_redirects_to_dashboard(self, login_page: LoginPage):
+        """Успешный логин с верными кредами перенаправляет на /dashboard."""
         login_page.login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
         login_page.page.wait_for_url("**/dashboard**")
         assert "/new/dashboard" in login_page.page.url
 
     def test_invalid_credentials_shows_error(self, login_page: LoginPage):
+        """Неверные email и пароль показывают непустое сообщение об ошибке."""
         login_page.login("wrong@example.com", "wrongpassword")
         login_page.page.wait_for_timeout(1500)
         assert login_page.error_msg.is_visible()
         assert login_page.error_msg.inner_text().strip() != ""
 
     def test_wrong_password_stays_on_login(self, login_page: LoginPage):
+        """Верный email, но неверный пароль — остаёмся на странице /login."""
         login_page.login(TEST_USER_EMAIL, "wrongpassword")
         login_page.page.wait_for_timeout(1500)
         assert "/new/login" in login_page.page.url
 
     def test_login_page_has_forgot_password_link(self, login_page: LoginPage):
+        """На странице логина присутствует ссылка «Забыли пароль»."""
         forgot = login_page.page.locator("a[href='/new/forgot-password']")
         expect(forgot).to_have_count(1)

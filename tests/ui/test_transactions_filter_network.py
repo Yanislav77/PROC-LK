@@ -36,6 +36,7 @@ def _capture_transactions_request(page: Page, action) -> dict:
 
 @pytest.mark.ui
 class TestFilterNetworkRequests:
+    """Каждый фильтр и вкладка отправляют правильные параметры в GET /api/v4/transactions/."""
 
     def test_apply_sends_transactions_request(self, transactions_page: TransactionsPage):
         """Apply отправляет GET к /api/v4/transactions/ с page и size."""

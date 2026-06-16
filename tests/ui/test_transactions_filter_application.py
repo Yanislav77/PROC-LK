@@ -1,3 +1,4 @@
+"""Проверяем применение фильтров: статус, дата, поиск — UI-состояние после Apply/Clear."""
 from datetime import datetime, timedelta
 
 import pytest
@@ -8,6 +9,8 @@ from pages.transactions_page import TransactionsPage
 
 @pytest.mark.ui
 class TestStatusFilterApplication:
+    """Выбор статуса — значение сохраняется в dropdown, сбрасывается через Очистить."""
+
     def test_select_status_option_updates_combobox(self, transactions_page: TransactionsPage):
         """Выбор опции в фильтре Статус обновляет его значение."""
         transactions_page.filter_status_select.click()
@@ -50,6 +53,8 @@ class TestStatusFilterApplication:
 
 @pytest.mark.ui
 class TestDateFilterApplication:
+    """Диапазон дат — виден, фильтрует таблицу, восстанавливается при сбросе."""
+
     def test_date_pickers_are_visible(self, transactions_page: TransactionsPage):
         """Поля диапазона дат отображаются на странице."""
         expect(transactions_page.date_from_input).to_be_visible()
@@ -85,6 +90,8 @@ class TestDateFilterApplication:
 
 @pytest.mark.ui
 class TestSearchApplication:
+    """Поиск — значение сохраняется после Apply, сбрасывается через Очистить."""
+
     def test_search_input_retains_value_after_apply(self, transactions_page: TransactionsPage):
         """После Применить введённый текст остаётся в поле поиска."""
         transactions_page.search_input.fill("test")
