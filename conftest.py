@@ -1,9 +1,17 @@
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 import pytest
 from utils.config import BASE_URL, HEADLESS, VIDEO, TEST_USER_EMAIL, TEST_USER_PASSWORD
 from api_clients.auth_client import AuthClient
+
+
+def pytest_configure(config):
+    if getattr(config.option, "htmlpath", None):
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        Path("reports").mkdir(parents=True, exist_ok=True)
+        config.option.htmlpath = f"reports/report_{timestamp}.html"
 
 VIDEO_DIR = Path("reports/videos")
 
