@@ -87,19 +87,25 @@ pytest tests/ui/transactions/test_transactions_filters.py::TestFilterControls::t
 
 ## HTML-отчёт
 
-После каждого прогона автоматически генерируется **`reports/report.html`** — единый самодостаточный файл, который открывается в браузере без сервера.
+После каждого прогона автоматически создаётся новый файл в папке `reports/` — единый самодостаточный HTML, который открывается в браузере без сервера.
+
+Имя файла содержит дату и время запуска:
+```
+reports/report_2026-06-16_17-25-43.html
+```
 
 ```bash
-# открыть после запуска (Windows)
-start reports\report.html
+# открыть последний отчёт (Windows PowerShell)
+start (Get-ChildItem reports\report_*.html | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
 
-# macOS
-open reports/report.html
+# macOS / Linux
+open $(ls -t reports/report_*.html | head -1)
 ```
 
 Что есть в отчёте:
 - статус каждого теста (passed / failed / skipped)
 - время выполнения
+- **описание теста** — что именно проверяется (раскрывается кликом по строке)
 - **скриншот при падении** (вставлен прямо в HTML, без внешних файлов)
 - трейс ошибки
 
