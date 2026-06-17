@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import pytest
+from pytest_html import extras as html_extras
 from utils.config import BASE_URL, HEADLESS, VIDEO, TEST_USER_EMAIL, TEST_USER_PASSWORD
 from api_clients.auth_client import AuthClient
 
@@ -68,6 +69,12 @@ def pytest_runtest_makereport(item, call):
     # Сохраняем rep_call / rep_setup / rep_teardown на ноде, чтобы фикстуры
     # могли проверить, упал ли тест (используется для скриншотов при падении).
     setattr(item, f"rep_{report.when}", report)
+    fn = getattr(item, "function", None)
+    doc = str(getattr(fn, "__doc__", None) or "").strip()
+    if report.when == "call" and doc:
+        report.extras = getattr(report, "extras", []) + [
+            html_extras.html(f"<p><em>{doc}</em></p>")
+        ]
     if report.when != "teardown":
         return
     src_str = getattr(item, "_video_src", None)

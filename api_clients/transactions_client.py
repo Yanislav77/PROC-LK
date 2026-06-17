@@ -56,3 +56,11 @@ class TransactionsClient(BaseClient):
             f"{self._v1_url}/transactions/{transaction_id}/status/",
             json={},
         )
+
+    def get_transaction_detail(self, transaction_id: int):
+        return self.get(f"/transactions/{transaction_id}/")
+
+    def get_transaction_history(self, transaction_id: int):
+        return self.session.get(
+            f"{self._v1_url}/transactions/{transaction_id}/history/"
+        )
