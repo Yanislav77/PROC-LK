@@ -113,7 +113,7 @@ class TestTransactionHistoryEntries:
         transactions_page.click_transaction(0)
         transactions_page.page.wait_for_load_state("networkidle")
         transactions_page.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        transactions_page.page.wait_for_timeout(1000)
+        detail.history_timeline_dates.first.wait_for(timeout=10000)
         return detail
 
     def test_history_section_visible(self, detail_page: TransactionDetailPage):
@@ -151,6 +151,26 @@ class TestTransactionPaymentDetailsFields:
     def test_tran_id_label_visible(self, detail_page: TransactionDetailPage):
         """Метка «ID транзакции» отображается в блоке «Детали платежа»."""
         expect(detail_page.detail_tran_id_label).to_be_visible()
+
+    def test_date_label_visible(self, detail_page: TransactionDetailPage):
+        """Метка «Дата» отображается в блоке «Детали платежа»."""
+        expect(detail_page.detail_date_label).to_be_visible()
+
+    def test_terminal_label_visible(self, detail_page: TransactionDetailPage):
+        """Метка «Терминал» отображается в блоке «Детали платежа»."""
+        expect(detail_page.detail_terminal_label).to_be_visible()
+
+    def test_status_label_visible(self, detail_page: TransactionDetailPage):
+        """Метка «Статус» отображается в блоке «Детали платежа»."""
+        expect(detail_page.detail_status_label).to_be_visible()
+
+    def test_amount_label_visible(self, detail_page: TransactionDetailPage):
+        """Метка «Сумма» отображается в блоке «Детали платежа»."""
+        expect(detail_page.detail_amount_label).to_be_visible()
+
+    def test_currency_label_visible(self, detail_page: TransactionDetailPage):
+        """Метка «Валюта» отображается в блоке «Детали платежа»."""
+        expect(detail_page.detail_currency_label).to_be_visible()
 
     def test_fee_label_visible(self, detail_page: TransactionDetailPage):
         """Метка «Сумма комиссии» отображается в блоке «Детали платежа»."""

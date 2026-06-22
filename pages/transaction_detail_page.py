@@ -34,6 +34,11 @@ class TransactionDetailPage(BasePage):
         # Payment Details card — field labels
         self.detail_order_id_label = page.get_by_text("ID заказа")
         self.detail_tran_id_label = page.get_by_text("ID транзакции")
+        self.detail_date_label = page.get_by_text("Дата")
+        self.detail_terminal_label = page.get_by_text("Терминал", exact=True)
+        self.detail_status_label = page.get_by_text("Статус", exact=True)
+        self.detail_amount_label = page.get_by_text("Сумма", exact=True)
+        self.detail_currency_label = page.get_by_text("Валюта")
         self.detail_fee_label = page.get_by_text("Сумма комиссии")
         self.detail_payment_method_label = page.get_by_text("Метод оплаты")
         self.detail_mode_label = page.get_by_text("Режим")
