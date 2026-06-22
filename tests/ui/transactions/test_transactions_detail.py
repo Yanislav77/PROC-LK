@@ -1,4 +1,5 @@
 """Тесты страницы детализации транзакции: структура, навигация, поля, уведомления."""
+import re
 import pytest
 from playwright.sync_api import expect
 from pages.transactions_page import TransactionsPage
@@ -255,8 +256,9 @@ class TestTransactionDetailNotifications:
         detail_page.send_webhook_btn.click()
         expect(detail_page.notification).to_be_visible(timeout=10000)
 
-    @pytest.mark.xfail(reason="BUG: уведомление содержит «Вебхук отправлен успешно» без ID транзакции; спек требует «ID транзакции: X - Webhook отправлен успешно»", strict=True)
     def test_webhook_notification_contains_transaction_id(self, detail_page: TransactionDetailPage):
-        """Уведомление о вебхуке содержит текст «ID транзакции»."""
+        """Уведомление о вебхуке содержит ID транзакции в формате «{id}: вебхук отправлен успешно»."""
         detail_page.send_webhook_btn.click()
-        expect(detail_page.notification).to_contain_text("ID транзакции", timeout=10000)
+        expect(detail_page.notification).to_contain_text(
+            re.compile(r".+: вебхук отправлен успешно", re.IGNORECASE), timeout=10000
+        )
