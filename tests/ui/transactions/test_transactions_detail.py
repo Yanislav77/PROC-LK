@@ -16,6 +16,7 @@ class TestTransactionDetail:
         detail = TransactionDetailPage(transactions_page.page)
         transactions_page.click_transaction(0)
         transactions_page.page.wait_for_load_state("networkidle")
+        detail.title.wait_for(timeout=10000)
         return detail
 
     def test_detail_page_is_loaded(self, detail_page: TransactionDetailPage):
@@ -49,11 +50,20 @@ class TestTransactionDetail:
         # убедимся, что это страница списка, а не детализации
         assert detail_page.page.url.rstrip("/").endswith("/transactions")
 
-    def test_detail_page_has_refund_button(self, detail_page: TransactionDetailPage):
-        """Кнопка «Возврат» скрыта для не-Completed транзакций (первая в списке)."""
-        # Per spec: button renders only when status = Completed.
-        # The first transaction is typically Rejected/Processing — button must not be visible.
-        expect(detail_page.refund_btn).not_to_be_visible()
+    @pytest.fixture
+    def rejected_detail_page(self, transactions_page: TransactionsPage) -> TransactionDetailPage:
+        """Открывает первую транзакцию со статусом Rejected (кнопка «Возврат» должна быть скрыта)."""
+        transactions_page.filter_status_select.click()
+        transactions_page.page.get_by_role("option", name="Rejected").click()
+        transactions_page.apply_filters()
+        detail = TransactionDetailPage(transactions_page.page)
+        transactions_page.click_transaction(0)
+        transactions_page.page.wait_for_load_state("networkidle")
+        return detail
+
+    def test_detail_page_has_refund_button(self, rejected_detail_page: TransactionDetailPage):
+        """Кнопка «Возврат» скрыта для транзакций со статусом Rejected."""
+        expect(rejected_detail_page.refund_btn).not_to_be_visible()
 
     def test_detail_page_has_send_webhook_button(self, detail_page: TransactionDetailPage):
         """Кнопка «Отправить вебхук» присутствует на странице детализации."""
