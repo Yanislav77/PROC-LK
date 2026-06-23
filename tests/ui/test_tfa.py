@@ -6,6 +6,7 @@ from playwright.sync_api import Page, expect
 from pages.login_page import LoginPage
 from pages.tfa_setup_page import TfaSetupPage
 from pages.tfa_login_page import TfaLoginPage
+from pages.components.sidebar import Sidebar
 from utils.config import (
     TFA_EXISTING_USER_EMAIL,
     TFA_EXISTING_USER_PASSWORD,
@@ -125,6 +126,12 @@ class TestTfaSetup:
         page.wait_for_timeout(1500)
         expect(setup.error_msg).to_have_text("Неверный код")
 
+    def test_setup_cancel_btn_redirects_to_login(self, page: Page):
+        """Клик «Отменить» на странице настройки TFA перенаправляет на страницу входа."""
+        TfaSetupPage(page).cancel_btn.click()
+        page.wait_for_url("**/login**", timeout=10000)
+        assert "/login" in page.url
+
     def test_setup_with_valid_code_redirects_to_dashboard(self, page: Page):
         """Ввод корректного TOTP-кода завершает настройку и перенаправляет на /dashboard."""
         setup = TfaSetupPage(page)
@@ -210,6 +217,12 @@ class TestTfaLogin:
         page.wait_for_timeout(1500)
         assert "/tfa/verify" in page.url
 
+    def test_tfa_login_logout_btn_redirects_to_login(self, page: Page):
+        """Клик «Выйти» на странице /tfa/verify перенаправляет на страницу входа."""
+        TfaLoginPage(page).logout_btn.click()
+        page.wait_for_url("**/login**", timeout=10000)
+        assert "/login" in page.url
+
 
 # ---------------------------------------------------------------------------
 # Вход без TFA
@@ -237,3 +250,40 @@ class TestLoginWithoutTfa:
         _do_login(page, TFA_NO_TFA_USER_EMAIL, TFA_NO_TFA_USER_PASSWORD)
         page.wait_for_load_state("networkidle")
         assert "/tfa/verify" not in page.url
+
+
+# ---------------------------------------------------------------------------
+# Полный цикл TFA: вход → верификация → логаут → повторный вход → верификация
+# ---------------------------------------------------------------------------
+
+@pytest.mark.ui
+class TestTfaFullCycle:
+    """Полный пользовательский сценарий с TFA: два полных цикла входа и выхода."""
+
+    def test_full_tfa_cycle(self, page: Page):
+        """Логин → /tfa/verify → TOTP → /dashboard → логаут → /login → повторный логин → /tfa/verify → TOTP → /dashboard."""
+        # --- первый вход ---
+        _do_login(page, TFA_EXISTING_USER_EMAIL, TFA_EXISTING_USER_PASSWORD)
+        page.wait_for_url("**/tfa/verify**", timeout=10000)
+
+        tfa = TfaLoginPage(page)
+        tfa.submit_code(pyotp.TOTP(TFA_EXISTING_USER_SECRET).now())
+        page.wait_for_url("**/dashboard**", timeout=10000)
+        assert "/new/dashboard" in page.url
+
+        # --- логаут через сайдбар ---
+        Sidebar(page).logout_btn.click()
+        page.wait_for_url("**/login**", timeout=10000)
+        assert "/login" in page.url
+
+        # --- повторный вход (уже на /login, не navigating снова) ---
+        lp = LoginPage(page)
+        lp.username_input.fill(TFA_EXISTING_USER_EMAIL)
+        lp.password_input.fill(TFA_EXISTING_USER_PASSWORD)
+        lp.submit_btn.click()
+        page.wait_for_url("**/tfa/verify**", timeout=10000)
+
+        tfa = TfaLoginPage(page)
+        tfa.submit_code(pyotp.TOTP(TFA_EXISTING_USER_SECRET).now())
+        page.wait_for_url("**/dashboard**", timeout=10000)
+        assert "/new/dashboard" in page.url
