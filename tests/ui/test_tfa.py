@@ -11,6 +11,7 @@ from utils.config import (
     TFA_EXISTING_USER_EMAIL,
     TFA_EXISTING_USER_PASSWORD,
     TFA_EXISTING_USER_SECRET,
+    TFA_EXISTING_USER_ID,
     TFA_NO_TFA_USER_EMAIL,
     TFA_NO_TFA_USER_PASSWORD,
 )
@@ -287,3 +288,57 @@ class TestTfaFullCycle:
         tfa.submit_code(pyotp.TOTP(TFA_EXISTING_USER_SECRET).now())
         page.wait_for_url("**/dashboard**", timeout=10000)
         assert "/new/dashboard" in page.url
+
+
+# ---------------------------------------------------------------------------
+# Прямой переход без авторизации — защита роутов
+# ---------------------------------------------------------------------------
+
+@pytest.mark.ui
+@pytest.mark.smoke
+class TestTfaDirectNavigation:
+    """Неаутентифицированный доступ к TFA-страницам должен редиректить на /login."""
+
+    def test_unauthenticated_access_to_tfa_verify(self, page: Page):
+        """Прямой переход на /tfa/verify без логина перенаправляет на /login."""
+        from pages.base_page import BasePage
+        BasePage(page).navigate("/tfa/verify")
+        page.wait_for_url("**/login**", timeout=10000)
+        assert "/login" in page.url
+
+    def test_unauthenticated_access_to_tfa_setup(self, page: Page):
+        """Прямой переход на /tfa/setup без логина перенаправляет на /login."""
+        from pages.base_page import BasePage
+        BasePage(page).navigate("/tfa/setup")
+        page.wait_for_url("**/login**", timeout=10000)
+        assert "/login" in page.url
+
+
+# ---------------------------------------------------------------------------
+# Флаг ignore_tfa: пользователь с TFA пропускает шаг верификации
+# ---------------------------------------------------------------------------
+
+@pytest.mark.ui
+class TestTfaIgnoreFlag:
+    """Пользователь с use_tfa=True и ignore_tfa=True логинится напрямую в /dashboard."""
+
+    @pytest.fixture(autouse=True)
+    def enable_ignore_tfa(self):
+        """Включает ignore_tfa для TFA_EXISTING_USER, восстанавливает после теста."""
+        from utils.admin_helper import set_ignore_tfa
+        set_ignore_tfa(TFA_EXISTING_USER_ID, True)
+        yield
+        set_ignore_tfa(TFA_EXISTING_USER_ID, False)
+
+    def test_login_with_ignore_tfa_skips_verify(self, page: Page):
+        """При ignore_tfa=True вход идёт напрямую на /dashboard без /tfa/verify."""
+        _do_login(page, TFA_EXISTING_USER_EMAIL, TFA_EXISTING_USER_PASSWORD)
+        page.wait_for_url("**/dashboard**", timeout=10000)
+        assert "/tfa/verify" not in page.url
+        assert "/new/dashboard" in page.url
+
+    def test_login_with_ignore_tfa_no_verify_page(self, page: Page):
+        """При ignore_tfa=True страница /tfa/verify не показывается."""
+        _do_login(page, TFA_EXISTING_USER_EMAIL, TFA_EXISTING_USER_PASSWORD)
+        page.wait_for_load_state("networkidle")
+        assert "/tfa/verify" not in page.url

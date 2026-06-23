@@ -64,6 +64,63 @@ def create_fresh_tfa_user() -> tuple[str, str, int]:
     return result[0]
 
 
+def get_user_id_by_username(username: str) -> int:
+    """Находит ID пользователя по username через поиск в админке."""
+    result = []
+
+    def _run():
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            _do_admin_login(page, ADMIN_URL, ADMIN_USER, ADMIN_PASSWORD)
+            page.goto(f"{ADMIN_URL}/core/user/?q={username}")
+            page.wait_for_load_state("networkidle")
+            link = page.locator("table#result_list tbody tr td a").first
+            href = link.get_attribute("href")
+            user_id = int(href.rstrip("/").split("/")[-2])
+            browser.close()
+            result.append(user_id)
+
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join()
+    return result[0]
+
+
+def _set_checkbox(user_id: int, field_name: str, value: bool) -> None:
+    """Устанавливает/снимает чекбокс у пользователя в админке."""
+    def _run():
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            _do_admin_login(page, ADMIN_URL, ADMIN_USER, ADMIN_PASSWORD)
+            page.goto(f"{ADMIN_URL}/core/user/{user_id}/change/")
+            page.wait_for_load_state("networkidle")
+            _remove_debug_toolbar(page)
+            cb = page.locator(f"input[name={field_name}]")
+            if value:
+                cb.check()
+            else:
+                cb.uncheck()
+            page.locator("input[name=_save]").click()
+            page.wait_for_load_state("networkidle")
+            browser.close()
+
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join()
+
+
+def set_ignore_tfa(user_id: int, ignore: bool) -> None:
+    """Устанавливает или снимает флаг 'Игнорировать TFA' для пользователя в админке."""
+    _set_checkbox(user_id, "ignore_tfa", ignore)
+
+
+def set_use_tfa(user_id: int, value: bool) -> None:
+    """Включает или выключает TFA для пользователя напрямую через админку."""
+    _set_checkbox(user_id, "use_tfa", value)
+
+
 def delete_user(user_id: int) -> None:
     """Удаляет пользователя по ID через админку.
 

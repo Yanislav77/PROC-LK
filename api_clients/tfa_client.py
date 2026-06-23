@@ -12,7 +12,8 @@ class TfaClient(BaseClient):
         return self.put("/account/tfa/", json={"use_tfa": True, "key": code},
                         headers={"Authorization": f"Bearer {access_token}"})
 
-    def disable_tfa(self, access_token: str):
-        """PUT /api/v4/account/tfa — отключение TFA для аккаунта."""
-        return self.put("/account/tfa/", json={"use_tfa": False},
+    def disable_tfa(self, code: str, password: str, access_token: str):
+        """PUT /api/v4/account/tfa — отключение TFA (требует TOTP-код и пароль)."""
+        return self.put("/account/tfa/",
+                        json={"use_tfa": False, "key": code, "input_password": password},
                         headers={"Authorization": f"Bearer {access_token}"})

@@ -15,7 +15,10 @@ from utils.config import (
     TFA_EXISTING_USER_EMAIL,
     TFA_EXISTING_USER_PASSWORD,
     TFA_EXISTING_USER_SECRET,
+    TFA_EXISTING_USER_ID,
 )
+
+_TFA_PWD = TFA_EXISTING_USER_PASSWORD
 
 
 @pytest.fixture
@@ -156,3 +159,62 @@ class TestAccountTfaUpdate:
         client = TfaClient()
         r = client.connect_tfa("000000", full_access_token)
         assert r.status_code in (400, 401)
+
+
+@pytest.mark.api
+class TestTfaInvalidToken:
+    """Запросы с невалидным Bearer токеном должны возвращать 401."""
+
+    def test_verify_tfa_with_invalid_token(self):
+        """POST /auth/tfa с невалидным Bearer токеном возвращает 401."""
+        r = TfaClient().verify_tfa("123456", "invalid_token")
+        assert r.status_code == 401
+
+    def test_connect_tfa_with_invalid_token(self):
+        """PUT /account/tfa с невалидным Bearer токеном возвращает 401."""
+        r = TfaClient().connect_tfa("123456", "invalid_token")
+        assert r.status_code == 401
+
+    def test_disable_tfa_with_invalid_token(self):
+        """PUT /account/tfa (disable) с невалидным Bearer токеном возвращает 401."""
+        r = TfaClient().disable_tfa("123456", "password", "invalid_token")
+        assert r.status_code == 401
+
+
+@pytest.mark.api
+class TestAccountTfaDisable:
+    """PUT /api/v4/account/tfa с use_tfa=False — отключение TFA."""
+
+    @pytest.fixture(autouse=True)
+    def restore_tfa_after(self):
+        """После теста восстанавливает use_tfa=True через админку (без TOTP)."""
+        from utils.admin_helper import set_use_tfa
+        yield
+        set_use_tfa(TFA_EXISTING_USER_ID, True)
+
+    def test_disable_tfa_status_200(self, full_access_token):
+        """PUT /account/tfa с use_tfa=False возвращает статус 200."""
+        code = pyotp.TOTP(TFA_EXISTING_USER_SECRET).now()
+        r = TfaClient().disable_tfa(code, _TFA_PWD, full_access_token)
+        assert r.status_code == 200
+
+    def test_disable_tfa_returns_access_token(self, full_access_token):
+        """После отключения TFA в ответе есть новый access токен."""
+        code = pyotp.TOTP(TFA_EXISTING_USER_SECRET).now()
+        r = TfaClient().disable_tfa(code, _TFA_PWD, full_access_token)
+        assert "access" in r.json()["response"]
+
+    def test_disable_tfa_refresh_in_set_cookie(self, full_access_token):
+        """После отключения TFA refresh токен возвращается в Set-Cookie."""
+        code = pyotp.TOTP(TFA_EXISTING_USER_SECRET).now()
+        r = TfaClient().disable_tfa(code, _TFA_PWD, full_access_token)
+        assert "refreshToken" in r.headers.get("Set-Cookie", "")
+
+    def test_after_disable_login_returns_no_need_tfa(self, full_access_token):
+        """После отключения TFA логин возвращает need_tfa=False или access напрямую."""
+        code = pyotp.TOTP(TFA_EXISTING_USER_SECRET).now()
+        TfaClient().disable_tfa(code, _TFA_PWD, full_access_token)
+        r = AuthClient().login(TFA_EXISTING_USER_EMAIL, TFA_EXISTING_USER_PASSWORD)
+        assert r.status_code == 200
+        data = r.json()["response"]
+        assert data.get("need_tfa") is not True
