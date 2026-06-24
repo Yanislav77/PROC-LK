@@ -121,25 +121,80 @@ def set_use_tfa(user_id: int, value: bool) -> None:
     _set_checkbox(user_id, "use_tfa", value)
 
 
+def create_tfa_enabled_user() -> tuple[str, str, str, int]:
+    """Создаёт пользователя через админку и активирует ему TFA через браузер.
+
+    Возвращает (username, password, totp_secret, user_id).
+    """
+    import pyotp
+    from playwright.sync_api import sync_playwright
+    from utils.config import BASE_URL
+
+    username, password, user_id = create_fresh_tfa_user()
+    secret = None
+
+    def _run():
+        nonlocal secret
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.goto(f"{BASE_URL}/login", wait_until="networkidle")
+            page.locator("input[name=username]").fill(username)
+            page.locator("input[name=password]").fill(password)
+            page.locator("button[type=submit]").click()
+            page.wait_for_url(
+                lambda url: "dashboard" in url or "tfa/setup" in url or "tfa/verify" in url,
+                timeout=30000,
+            )
+            if "tfa/setup" not in page.url:
+                page.goto(f"{BASE_URL}/tfa/setup", wait_until="networkidle", timeout=30000)
+            secret_locator = page.locator("text=/(?:[A-Z2-7]{4} *){3,}/")
+            secret_locator.wait_for(state="visible", timeout=10000)
+            secret = secret_locator.inner_text().strip().replace(" ", "")
+            code = pyotp.TOTP(secret).now()
+            page.locator("input[name='key']").fill(code)
+            page.get_by_role("button", name="Подключить").click()
+            page.wait_for_url("**/dashboard**", timeout=15000)
+            browser.close()
+
+        import time
+        # The activation code was just used — wait for the next TOTP window
+        # so any subsequent verify_tfa call uses a fresh, unreused code.
+        remaining = 30 - (time.time() % 30)
+        time.sleep(remaining + 1)
+
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join()
+    return username, password, secret, user_id
+
+
 def delete_user(user_id: int) -> None:
     """Удаляет пользователя по ID через админку.
 
     Запускается в отдельном потоке — вне asyncio-цикла pytest-playwright.
     """
     def _run():
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            _do_admin_login(page, ADMIN_URL, ADMIN_USER, ADMIN_PASSWORD)
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    _do_admin_login(page, ADMIN_URL, ADMIN_USER, ADMIN_PASSWORD)
+                    page.goto(f"{ADMIN_URL}/core/user/{user_id}/delete/")
+                    page.wait_for_load_state("networkidle")
+                    _remove_debug_toolbar(page)
+                    page.wait_for_function(
+                        "() => !!document.querySelector('form')", timeout=10000
+                    )
+                    page.evaluate("document.querySelector('form').submit()")
+                    page.wait_for_load_state("networkidle")
+                finally:
+                    browser.close()
+        except Exception as exc:
+            import warnings
+            warnings.warn(f"delete_user({user_id}) failed: {exc}")
 
-            page.goto(f"{ADMIN_URL}/core/user/{user_id}/delete/")
-            page.wait_for_load_state("networkidle")
-            _remove_debug_toolbar(page)
-            page.locator("input[type=submit], button[type=submit]").first.click()
-            page.wait_for_load_state("networkidle")
-
-            browser.close()
-
-    t = threading.Thread(target=_run)
+    t = threading.Thread(target=_run, daemon=True)
     t.start()
-    t.join()
+    t.join(timeout=60)

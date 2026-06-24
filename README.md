@@ -13,6 +13,7 @@
 | Раннер | pytest |
 | HTML-отчёт | pytest-html (self-contained) |
 | XLSX-парсинг | openpyxl |
+| TOTP (TFA) | pyotp |
 
 ---
 
@@ -55,6 +56,21 @@ TEST_USER_EMAIL=your@email.com
 TEST_USER_PASSWORD=yourpassword
 HEADLESS=true
 VIDEO=false
+
+# Админка (для создания/удаления тестовых пользователей в TFA-тестах)
+ADMIN_URL=https://preprodcabinet.payment.center/admin
+ADMIN_USER=admin@example.com
+ADMIN_PASSWORD=adminpassword
+
+# Постоянный пользователь с включённым TFA (только для read-only UI-проверок)
+TFA_EXISTING_USER_EMAIL=test_tfa_xxxxxxxx
+TFA_EXISTING_USER_PASSWORD=TestPass123!
+TFA_EXISTING_USER_SECRET=BASE32SECRET
+TFA_EXISTING_USER_ID=0
+
+# Пользователь без TFA (для тестов входа без двухфакторки)
+TFA_NO_TFA_USER_EMAIL=user_without_tfa@example.com
+TFA_NO_TFA_USER_PASSWORD=password
 ```
 
 > `HEADLESS=false` — браузер открывается на экране (удобно для отладки).
@@ -75,6 +91,9 @@ pytest -m ui
 
 # smoke-набор (быстрая проверка)
 pytest -m smoke
+
+# только TFA-тесты (UI + API, все браузеры)
+pytest tests/ui/test_tfa.py tests/api/test_tfa.py
 
 # конкретный файл
 pytest tests/ui/transactions/test_transactions_filters.py
@@ -155,6 +174,7 @@ PROC-LK/
 ├── tests/
 │   ├── api/                  # API-тесты
 │   │   ├── test_auth.py
+│   │   ├── test_tfa.py        # TFA API-тесты: verify, connect, disable, невалидные токены
 │   │   ├── test_transactions.py
 │   │   ├── test_account_services.py
 │   │   ├── test_exports.py
@@ -163,6 +183,7 @@ PROC-LK/
 │   └── ui/                   # UI / E2E тесты
 │       ├── conftest.py        # общие фикстуры: login_page, authenticated_page, скриншоты на падение
 │       ├── test_login.py
+│       ├── test_tfa.py        # TFA UI-тесты: setup, вход с TOTP, полный цикл, прямая навигация
 │       └── transactions/      # все тесты страницы транзакций
 │           ├── conftest.py    # фикстура transactions_page
 │           ├── test_transactions.py              # загрузка, табы, навигация
@@ -179,7 +200,8 @@ PROC-LK/
 │           └── test_transactions_detail.py             # страница детализации
 │
 ├── utils/
-│   └── config.py             # загрузка переменных из .env
+│   ├── config.py             # загрузка переменных из .env
+│   └── admin_helper.py       # создание/удаление пользователей через Django-админку (для TFA)
 │
 ├── reports/                  # генерируется автоматически (gitignored)
 │   ├── report.html           # HTML-отчёт последнего прогона
@@ -195,21 +217,30 @@ PROC-LK/
 
 ## Покрытие
 
-### API (42 теста)
+### API (42 + 27 = 69 тестов)
 
 | Модуль | Что проверяется |
 |---|---|
 | **Auth** | успешный логин, неверный пароль, отсутствие логина |
+| **TFA — verify** (`POST /api/v4/auth/tfa`) | статус 200, access-токен в теле, refresh только в Set-Cookie (HttpOnly), невалидный код |
+| **TFA — connect** (`PUT /api/v4/account/tfa`) | статус 200, токены, HttpOnly cookie, ошибка на неверный код |
+| **TFA — disable** (`PUT /api/v4/account/tfa` с `use_tfa=false`) | отключение, логин после отключения возвращает `need_tfa=false` |
+| **TFA — невалидный токен** | 401 на verify/connect/disable с `invalid_token` |
 | **Transactions** | список, пагинация, фильтры, `payment_method`, `p2p_bankdetails`, `payed_range` |
 | **Account Services** | `POST /api/v4/account/services/` — терминалы по партнёрам, структура, edge cases |
 | **Exports** | создание CSV/XLSX, опрос статуса, скачивание, проверка колонок |
 | **Transaction Actions** | возврат, отправка вебхука, запрос статуса — успех и ошибки |
 
-### UI (160 тестов)
+### UI (160 + 75 = 235 тестов)
 
 | Модуль | Что проверяется |
 |---|---|
 | **Login** | успешный вход, неверные креды, ссылка «Забыли пароль» |
+| **TFA — Setup** | страница настройки: QR, секрет, поле кода, кнопки; неверный код → ошибка; верный код → dashboard |
+| **TFA — Login** | страница ввода TOTP: UI-элементы, верный код → dashboard, неверный → ошибка, кнопка выхода |
+| **TFA — Full cycle** | логин → TFA → dashboard → logout → повторный вход с новым кодом |
+| **TFA — Direct navigation** | прямой переход на `/tfa/verify` и `/tfa/setup` без авторизации → редирект |
+| **TFA — ignore_tfa** | флаг `ignore_tfa` пропускает экран TFA при входе |
 | **Transactions — базовые** | загрузка таблицы, табы (Платежи/Выплаты/Chargeback/Все), кнопки, навигация |
 | **Dropdown-контент** | все значения в фильтрах: Статус (8 вариантов), Метод (Card/P2P/APM), Режим (Test/Live), Дата тип, Параметры поиска, Размер страницы |
 | **Датапикеры** | дефолт = последние 7 дней, поля кликабельны, ввод с клавиатуры |
@@ -221,6 +252,12 @@ PROC-LK/
 | **Экспорт** | кнопки CSV/XLSX видимы и активны, оба шлют POST на один endpoint |
 | **Кнопки действий** | Запросить статус / Отправить вебхук / Возврат — видимы и disabled без выбора |
 | **Детализация** | заголовок, секции, кнопка «Назад», кнопки действий |
+
+### Изоляция TFA-тестов
+
+Тесты, которые мутируют TFA-состояние (enable/disable/verify), используют **изолированного пользователя** (создаётся в начале теста через Django-админку, удаляется после). Это предотвращает конфликты между тестами при TOTP code reuse (сервер блокирует повторное использование кода в течение 30 с).
+
+`TFA_EXISTING_USER` используется только в read-only тестах: проверка `need_tfa=true` при логине и UI-тесты страницы ввода TOTP.
 
 ---
 

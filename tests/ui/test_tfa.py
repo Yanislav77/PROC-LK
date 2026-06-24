@@ -152,9 +152,17 @@ class TestTfaSetup:
 class TestTfaLogin:
     """Вход пользователя с уже настроенным TFA: экран ввода TOTP-кода."""
 
+    @pytest.fixture(scope="class")
+    def login_tfa_user(self):
+        """Изолированный пользователь с TFA для всего класса."""
+        from utils.admin_helper import create_tfa_enabled_user, delete_user
+        email, password, secret, user_id = create_tfa_enabled_user()
+        yield {"email": email, "password": password, "secret": secret, "id": user_id}
+        delete_user(user_id)
+
     @pytest.fixture(autouse=True)
-    def go_to_tfa_login(self, page: Page):
-        _do_login(page, TFA_EXISTING_USER_EMAIL, TFA_EXISTING_USER_PASSWORD)
+    def go_to_tfa_login(self, page: Page, login_tfa_user):
+        _do_login(page, login_tfa_user["email"], login_tfa_user["password"])
         page.wait_for_url("**/tfa/verify**", timeout=10000)
 
     def test_tfa_login_page_title_visible(self, page: Page):
@@ -189,10 +197,10 @@ class TestTfaLogin:
         """Кнопка «Выйти» отображается на странице."""
         expect(TfaLoginPage(page).logout_btn).to_be_visible()
 
-    def test_tfa_login_with_valid_code_redirects_to_dashboard(self, page: Page):
+    def test_tfa_login_with_valid_code_redirects_to_dashboard(self, page: Page, login_tfa_user):
         """Ввод корректного TOTP-кода перенаправляет на /dashboard."""
         tfa = TfaLoginPage(page)
-        code = pyotp.TOTP(TFA_EXISTING_USER_SECRET).now()
+        code = pyotp.TOTP(login_tfa_user["secret"]).now()
         tfa.submit_code(code)
         page.wait_for_url("**/dashboard**", timeout=10000)
         assert "/new/dashboard" in page.url
@@ -261,14 +269,24 @@ class TestLoginWithoutTfa:
 class TestTfaFullCycle:
     """Полный пользовательский сценарий с TFA: два полных цикла входа и выхода."""
 
-    def test_full_tfa_cycle(self, page: Page):
-        """Логин → /tfa/verify → TOTP → /dashboard → логаут → /login → повторный логин → /tfa/verify → TOTP → /dashboard."""
-        # --- первый вход ---
-        _do_login(page, TFA_EXISTING_USER_EMAIL, TFA_EXISTING_USER_PASSWORD)
-        page.wait_for_url("**/tfa/verify**", timeout=10000)
+    @pytest.fixture(scope="class")
+    def full_cycle_user(self):
+        """Свежий пользователь с TFA для полного цикла — изолирован от TFA_EXISTING_USER."""
+        from utils.admin_helper import create_tfa_enabled_user, delete_user
+        email, password, secret, user_id = create_tfa_enabled_user()
+        yield {"email": email, "password": password, "secret": secret}
+        delete_user(user_id)
 
+    def test_full_tfa_cycle(self, page: Page, full_cycle_user):
+        """Логин → /tfa/verify → TOTP → /dashboard → логаут → /login → повторный логин → /tfa/verify → TOTP → /dashboard."""
+        import time
+        user = full_cycle_user
+
+        # --- первый вход ---
+        _do_login(page, user["email"], user["password"])
+        page.wait_for_url("**/tfa/verify**", timeout=10000)
         tfa = TfaLoginPage(page)
-        tfa.submit_code(pyotp.TOTP(TFA_EXISTING_USER_SECRET).now())
+        tfa.submit_code(pyotp.TOTP(user["secret"]).now())
         page.wait_for_url("**/dashboard**", timeout=10000)
         assert "/new/dashboard" in page.url
 
@@ -277,15 +295,19 @@ class TestTfaFullCycle:
         page.wait_for_url("**/login**", timeout=10000)
         assert "/login" in page.url
 
-        # --- повторный вход (уже на /login, не navigating снова) ---
+        # Ждём нового TOTP-окна чтобы не использовать тот же код повторно
+        remaining = 30 - (time.time() % 30)
+        if remaining < 5:
+            page.wait_for_timeout(int(remaining * 1000) + 1500)
+
+        # --- повторный вход ---
         lp = LoginPage(page)
-        lp.username_input.fill(TFA_EXISTING_USER_EMAIL)
-        lp.password_input.fill(TFA_EXISTING_USER_PASSWORD)
+        lp.username_input.fill(user["email"])
+        lp.password_input.fill(user["password"])
         lp.submit_btn.click()
         page.wait_for_url("**/tfa/verify**", timeout=10000)
-
         tfa = TfaLoginPage(page)
-        tfa.submit_code(pyotp.TOTP(TFA_EXISTING_USER_SECRET).now())
+        tfa.submit_code(pyotp.TOTP(user["secret"]).now())
         page.wait_for_url("**/dashboard**", timeout=10000)
         assert "/new/dashboard" in page.url
 
