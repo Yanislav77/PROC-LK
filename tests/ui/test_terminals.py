@@ -11,6 +11,8 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from api_clients.auth_client import AuthClient
+from api_clients.services_client import ServicesClient
 from pages.terminals_page import TerminalsPage
 from pages.terminal_edit_page import TerminalEditPage
 from utils.config import BASE_URL, TEST_USER_EMAIL, TEST_USER_PASSWORD
@@ -42,9 +44,38 @@ def terminals_page(page: Page) -> TerminalsPage:
 def terminal_edit_page(page: Page, terminals_page: TerminalsPage) -> TerminalEditPage:
     """Переходит на страницу редактирования первого терминала."""
     terminals_page.click_first_terminal_link()
-    page.wait_for_url(r"**/terminals/[0-9]*", timeout=10000)
+    page.wait_for_url(re.compile(r"/terminals/\d+"), timeout=10000)
     page.wait_for_load_state("networkidle")
     return TerminalEditPage(page)
+
+
+@pytest.fixture
+def terminal_edit_with_restore(page: Page, terminal_edit_page: TerminalEditPage):
+    """Edit page + API-снэпшот: восстанавливает данные терминала после теста."""
+    match = re.search(r"/terminals/(\d+)", page.url)
+    service_id = int(match.group(1))
+
+    token = AuthClient().login(TEST_USER_EMAIL, TEST_USER_PASSWORD).json()["response"]["access"]
+    client = ServicesClient(token=token)
+    original = client.get_terminal(service_id).json()["response"]
+
+    yield terminal_edit_page, service_id, client
+
+    client.update_terminal(service_id, {
+        "name": original["name"],
+        "public_name": original["public_name"],
+        "is_test": original["is_test"],
+        "site_url": original["site_url"],
+        "url_success": original["url_success"],
+        "url_error": original["url_error"],
+        "url_notify": original["url_notify"],
+        "return_url": original["return_url"],
+        "processing_host": original["processing_host"],
+        "is_notify": original["is_notify"],
+        "notify_content_type": original["notify_content_type"],
+        "secret_key": original["secret_key"],
+        "podeli_approved": original["podeli_approved"],
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +221,10 @@ class TestTerminalEdit:
         expect(terminal_edit_page.breadcrumb_list).to_be_visible()
 
     def test_breadcrumb_current_visible(self, terminal_edit_page: TerminalEditPage):
-        """Хлебная крошка «Редактирование терминала» отображается."""
+        """Хлебная крошка «Редактирование терминала» отображается (per spec/Figma).
+
+        БАГ: текст «Редактирование терминала» отсутствует на странице.
+        """
         expect(terminal_edit_page.breadcrumb_current).to_be_visible()
 
     def test_back_btn_visible(self, terminal_edit_page: TerminalEditPage):
@@ -227,11 +261,17 @@ class TestTerminalEdit:
         expect(terminal_edit_page.copy_btn).to_be_visible()
 
     def test_name_input_visible(self, terminal_edit_page: TerminalEditPage):
-        """Поле «Имя» отображается."""
+        """Поле «Имя» отображается как форм-элемент (per Figma: disabled input с badge статуса).
+
+        БАГ: поле name отрендерено как статический <p>-текст, а не disabled input.
+        """
         expect(terminal_edit_page.name_input).to_be_visible()
 
     def test_name_input_is_readonly(self, terminal_edit_page: TerminalEditPage):
-        """Поле «Имя» недоступно для редактирования (иммутабельное)."""
+        """Поле «Имя» недоступно для редактирования (per spec: «не изменяется»).
+
+        БАГ: input[name=name] отсутствует — поле показано как текст, не как disabled input.
+        """
         disabled = terminal_edit_page.name_input.get_attribute("disabled")
         readonly = terminal_edit_page.name_input.get_attribute("readonly")
         assert disabled is not None or readonly is not None, (
@@ -251,7 +291,11 @@ class TestTerminalEdit:
         expect(terminal_edit_page.processing_host_input).to_be_visible()
 
     def test_processing_host_is_readonly(self, terminal_edit_page: TerminalEditPage):
-        """Поле «Хост процессинга» недоступно для редактирования."""
+        """Поле «Хост процессинга» недоступно для редактирования (per spec).
+
+        БАГ: input[name=processing_host] существует, но disabled=false и readonly=false —
+        поле доступно для ввода, хотя по спецификации должно быть заблокировано.
+        """
         disabled = terminal_edit_page.processing_host_input.get_attribute("disabled")
         readonly = terminal_edit_page.processing_host_input.get_attribute("readonly")
         assert disabled is not None or readonly is not None, (
@@ -263,11 +307,16 @@ class TestTerminalEdit:
         expect(terminal_edit_page.mode_input).to_be_visible()
 
     def test_mode_is_readonly(self, terminal_edit_page: TerminalEditPage):
-        """Поле «Режим» недоступно для редактирования."""
+        """Поле «Режим» (is_test) недоступно для редактирования (per spec).
+
+        БАГ: Select для is_test не заблокирован — aria-disabled отсутствует,
+        пользователь может изменить значение, что противоречит спецификации.
+        """
         disabled = terminal_edit_page.mode_input.get_attribute("disabled")
         readonly = terminal_edit_page.mode_input.get_attribute("readonly")
-        assert disabled is not None or readonly is not None, (
-            "Поле is_test/Режим должно быть disabled или readonly"
+        aria_disabled = terminal_edit_page.mode_input.get_attribute("aria-disabled")
+        assert disabled is not None or readonly is not None or aria_disabled == "true", (
+            "Поле is_test/Режим должно быть disabled, readonly или aria-disabled=true"
         )
 
     def test_is_notify_toggle_visible(self, terminal_edit_page: TerminalEditPage):
@@ -313,3 +362,113 @@ class TestTerminalEdit:
     def test_save_btn_text(self, terminal_edit_page: TerminalEditPage):
         """Кнопка сохранения содержит текст «Сохранить»."""
         expect(terminal_edit_page.save_btn).to_have_text("Сохранить")
+
+
+# ---------------------------------------------------------------------------
+# Сетевые запросы при сохранении
+# ---------------------------------------------------------------------------
+
+@pytest.mark.ui
+class TestTerminalEditNetwork:
+    """Проверка HTTP-запросов, которые фронт отправляет на бэк при сохранении формы."""
+
+    def test_save_sends_put_request(
+        self, terminal_edit_with_restore, page: Page
+    ):
+        """Клик «Сохранить» отправляет PUT /api/v1/services/{id}/."""
+        edit_page, service_id, _ = terminal_edit_with_restore
+        with page.expect_request(
+            lambda r: r.method == "PUT" and f"/services/{service_id}/" in r.url
+        ) as req_info:
+            edit_page.save_btn.click()
+        assert f"/services/{service_id}/" in req_info.value.url
+
+    def test_save_request_contains_public_name(
+        self, terminal_edit_with_restore, page: Page
+    ):
+        """Изменённый public_name попадает в тело PUT-запроса."""
+        edit_page, service_id, _ = terminal_edit_with_restore
+        new_name = "QA Public Name Test"
+        edit_page.public_name_input.fill(new_name)
+        with page.expect_request(
+            lambda r: r.method == "PUT" and f"/services/{service_id}/" in r.url
+        ) as req_info:
+            edit_page.save_btn.click()
+        assert new_name in (req_info.value.post_data or ""), (
+            "Новый public_name не найден в теле PUT-запроса"
+        )
+
+    def test_save_request_contains_url_success(
+        self, terminal_edit_with_restore, page: Page
+    ):
+        """Изменённый url_success попадает в тело PUT-запроса."""
+        edit_page, service_id, _ = terminal_edit_with_restore
+        new_url = "https://qa-ui-test.example.com/success"
+        edit_page.url_success_input.fill(new_url)
+        with page.expect_request(
+            lambda r: r.method == "PUT" and f"/services/{service_id}/" in r.url
+        ) as req_info:
+            edit_page.save_btn.click()
+        assert new_url in (req_info.value.post_data or ""), (
+            "Новый url_success не найден в теле PUT-запроса"
+        )
+
+    def test_save_request_contains_is_notify(
+        self, terminal_edit_with_restore, page: Page
+    ):
+        """Изменённый is_notify попадает в тело PUT-запроса."""
+        edit_page, service_id, client = terminal_edit_with_restore
+        current_val = client.get_terminal(service_id).json()["response"]["is_notify"]
+        edit_page.is_notify_toggle.click()
+        with page.expect_request(
+            lambda r: r.method == "PUT" and f"/services/{service_id}/" in r.url
+        ) as req_info:
+            edit_page.save_btn.click()
+        expected = str(not current_val).lower()
+        assert expected in (req_info.value.post_data or "").lower(), (
+            f"Ожидали is_notify={expected} в теле запроса"
+        )
+
+    def test_save_returns_200(
+        self, terminal_edit_with_restore, page: Page
+    ):
+        """PUT при сохранении возвращает статус 200."""
+        edit_page, service_id, _ = terminal_edit_with_restore
+        responses = []
+        page.on(
+            "response",
+            lambda r: responses.append(r) if f"/services/{service_id}/" in r.url and r.request.method == "PUT" else None,
+        )
+        edit_page.save_btn.click()
+        page.wait_for_load_state("networkidle")
+        assert responses and responses[0].status == 200, (
+            f"Ожидали 200, получили {responses[0].status if responses else 'нет ответа'}"
+        )
+
+    def test_save_shows_success_feedback(
+        self, terminal_edit_with_restore, page: Page
+    ):
+        """После успешного сохранения появляется уведомление об успехе."""
+        edit_page, _, _ = terminal_edit_with_restore
+        edit_page.save_btn.click()
+        page.wait_for_load_state("networkidle")
+        feedback = (
+            page.locator("[role=alert]")
+            .or_(page.locator(".notification, .toast, .snackbar"))
+            .or_(page.get_by_text("успешно", exact=False))
+        )
+        expect(feedback.first).to_be_visible(timeout=5000)
+
+    def test_save_persists_public_name(
+        self, terminal_edit_with_restore, page: Page
+    ):
+        """После сохранения поле public_name отображает новое значение."""
+        edit_page, service_id, client = terminal_edit_with_restore
+        new_name = "QA Saved Name"
+        edit_page.public_name_input.fill(new_name)
+        edit_page.save_btn.click()
+        page.wait_for_load_state("networkidle")
+        saved = client.get_terminal(service_id).json()["response"]["public_name"]
+        assert saved == new_name, (
+            f"На бэке сохранилось {saved!r}, ожидалось {new_name!r}"
+        )
