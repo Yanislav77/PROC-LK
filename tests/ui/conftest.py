@@ -1,16 +1,10 @@
-import base64
-import html as _html
 import re
-from pathlib import Path
 
 import pytest
-import pytest_html
 from playwright.sync_api import Page
 
 from pages.login_page import LoginPage
 from utils.config import BASE_URL, TEST_USER_EMAIL, TEST_USER_PASSWORD, VIDEO
-
-SCREENSHOTS_DIR = Path("reports/screenshots")
 
 
 def _safe_name(nodeid: str) -> str:
@@ -29,38 +23,6 @@ def _ensure_authenticated(page: Page) -> None:
         page.locator("button[type=submit]").click()
         page.wait_for_url("**/dashboard**")
         page.wait_for_load_state("networkidle")
-
-
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    """Описание теста и скриншот при падении — прикрепляет к HTML-отчёту."""
-    outcome = yield
-    report = outcome.get_result()
-
-    if report.when != "call":
-        return
-
-    report.extras = getattr(report, "extras", [])
-
-    description = (item.function.__doc__ or "").strip()
-    if description:
-        report.extras.insert(0, pytest_html.extras.html(f"<p>{_html.escape(description)}</p>"))
-
-    if not report.failed:
-        return
-    page: Page = item.funcargs.get("page")
-    if page is None:
-        return
-    try:
-        SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-        path = SCREENSHOTS_DIR / f"{_safe_name(item.nodeid)}.png"
-        raw = page.screenshot(path=str(path), full_page=True)
-        b64 = base64.b64encode(raw).decode("utf-8")
-        report.extras.append(
-            pytest_html.extras.image(f"data:image/png;base64,{b64}", name="screenshot")
-        )
-    except Exception:
-        pass
 
 
 @pytest.fixture(autouse=True)
@@ -89,5 +51,3 @@ def authenticated_page(page: Page) -> Page:
     page.wait_for_load_state("networkidle")
     _ensure_authenticated(page)
     return page
-
-

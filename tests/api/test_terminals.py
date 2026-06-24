@@ -28,7 +28,11 @@ _REQUIRED_FIELDS = {
 @pytest.fixture(scope="module")
 def auth_token():
     r = AuthClient().login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
-    assert r.status_code == 200
+    assert r.status_code == 200, (
+        f"Авторизация не удалась: HTTP {r.status_code}. "
+        f"Проверьте TEST_USER_EMAIL / TEST_USER_PASSWORD в .env. "
+        f"Ответ сервера: {r.text[:300]}"
+    )
     return r.json()["response"]["access"]
 
 
@@ -41,8 +45,13 @@ def services_client(auth_token):
 def service_id(services_client):
     """Берём ID первого активного терминала из списка."""
     r = services_client.get_terminals_list(status=1, page=1, size=1)
-    assert r.status_code == 200
-    return r.json()["response"]["results"][0]["id"]
+    assert r.status_code == 200, (
+        f"Список терминалов вернул HTTP {r.status_code}. "
+        f"Ответ: {r.text[:300]}"
+    )
+    results = r.json()["response"]["results"]
+    assert results, "Нет активных терминалов на стенде — тест требует хотя бы один"
+    return results[0]["id"]
 
 
 @pytest.fixture
