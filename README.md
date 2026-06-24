@@ -95,6 +95,9 @@ pytest -m smoke
 # только TFA-тесты (UI + API, все браузеры)
 pytest tests/ui/test_tfa.py tests/api/test_tfa.py
 
+# тесты терминалов (API + UI список)
+pytest tests/api/test_terminals.py tests/ui/test_terminals.py::TestTerminalsList
+
 # конкретный файл
 pytest tests/ui/transactions/test_transactions_filters.py
 
@@ -162,14 +165,17 @@ PROC-LK/
 │   ├── auth_client.py
 │   ├── transactions_client.py
 │   ├── exports_client.py
-│   └── account_client.py
+│   ├── account_client.py
+│   └── services_client.py    # GET/PUT /api/v1/services/{id}/ — терминалы
 │
 ├── pages/                    # Page Object Model (UI)
 │   ├── components/           # переиспользуемые компоненты
 │   ├── base_page.py
 │   ├── login_page.py
 │   ├── transactions_page.py
-│   └── transaction_detail_page.py
+│   ├── transaction_detail_page.py
+│   ├── terminals_page.py     # список терминалов (/terminals)
+│   └── terminal_edit_page.py # форма редактирования терминала (/terminals/{id})
 │
 ├── tests/
 │   ├── api/                  # API-тесты
@@ -178,12 +184,14 @@ PROC-LK/
 │   │   ├── test_transactions.py
 │   │   ├── test_account_services.py
 │   │   ├── test_exports.py
-│   │   └── test_transaction_actions.py
+│   │   ├── test_transaction_actions.py
+│   │   └── test_terminals.py  # GET/PUT терминала; 3 теста документируют баги бэкенда
 │   │
 │   └── ui/                   # UI / E2E тесты
 │       ├── conftest.py        # общие фикстуры: login_page, authenticated_page, скриншоты на падение
 │       ├── test_login.py
 │       ├── test_tfa.py        # TFA UI-тесты: setup, вход с TOTP, полный цикл, прямая навигация
+│       ├── test_terminals.py  # список и редактирование терминалов; Edit-тесты упадут до реализации фронта
 │       └── transactions/      # все тесты страницы транзакций
 │           ├── conftest.py    # фикстура transactions_page
 │           ├── test_transactions.py              # загрузка, табы, навигация
@@ -217,7 +225,7 @@ PROC-LK/
 
 ## Покрытие
 
-### API (42 + 27 = 69 тестов)
+### API (42 + 27 + 28 = 97 тестов)
 
 | Модуль | Что проверяется |
 |---|---|
@@ -230,8 +238,9 @@ PROC-LK/
 | **Account Services** | `POST /api/v4/account/services/` — терминалы по партнёрам, структура, edge cases |
 | **Exports** | создание CSV/XLSX, опрос статуса, скачивание, проверка колонок |
 | **Transaction Actions** | возврат, отправка вебхука, запрос статуса — успех и ошибки |
+| **Terminals** | `GET /api/v1/services/{id}/` — структура, типы полей, 404; `PUT` — обновление url/notify/public_name, переключение is_notify, notify_content_type; неаутентифицированный доступ, 404, иммутабельность name |
 
-### UI (160 + 75 = 235 тестов)
+### UI (160 + 75 + 53 = 288 тестов)
 
 | Модуль | Что проверяется |
 |---|---|
@@ -252,6 +261,8 @@ PROC-LK/
 | **Экспорт** | кнопки CSV/XLSX видимы и активны, оба шлют POST на один endpoint |
 | **Кнопки действий** | Запросить статус / Отправить вебхук / Возврат — видимы и disabled без выбора |
 | **Детализация** | заголовок, секции, кнопка «Назад», кнопки действий |
+| **Терминалы — список** | заголовок, фильтры (наименование/организация/валюта/режим/статус), таблица (7 колонок), ссылка-шестерёнка, пагинация, применение/сброс фильтра |
+| **Терминалы — редактирование** | хлебные крошки, кнопка «Назад», секретный ключ (маска + копировать), поля read-only (имя/хост/режим), поля editable (публичное имя, URL×4, is_notify), кнопка «Сохранить» *(тесты упадут до реализации фронтенда)* |
 
 ### Изоляция TFA-тестов
 
@@ -267,3 +278,7 @@ PROC-LK/
 |---|---|---|
 | `POST /api/v4/exports/` | статус `200` | возвращает `201` |
 | `GET /api/v4/exports/{id}/` | статусы `RUNNING / DONE / FAILED` | также бывает `PENDING` |
+| `GET /api/v1/services/{id}/` | без авторизации → `401` | возвращает `500` |
+| `PUT /api/v1/services/{id}/` | без авторизации → `401` | возвращает `500` |
+| `PUT /api/v1/services/{id}/` | поле `name` иммутабельно (не изменяется) | сервер принимает изменение `name` |
+| `GET /new/terminals/{id}` | открывается форма редактирования терминала | редирект на `/dashboard` (фронтенд не реализован) |
