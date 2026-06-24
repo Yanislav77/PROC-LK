@@ -166,7 +166,8 @@ PROC-LK/
 │   ├── transactions_client.py
 │   ├── exports_client.py
 │   ├── account_client.py
-│   └── services_client.py    # GET/PUT /api/v1/services/{id}/ — терминалы
+│   ├── services_client.py    # GET/PUT /api/v1/services/{id}/ — терминалы
+│   └── dashboard_client.py   # дашборд: currencies, statistics, countries, ps (v1+v4)
 │
 ├── pages/                    # Page Object Model (UI)
 │   ├── components/           # переиспользуемые компоненты
@@ -185,7 +186,8 @@ PROC-LK/
 │   │   ├── test_account_services.py
 │   │   ├── test_exports.py
 │   │   ├── test_transaction_actions.py
-│   │   └── test_terminals.py  # GET/PUT терминала; 3 теста документируют баги бэкенда
+│   │   ├── test_terminals.py  # GET/PUT терминала; 3 теста документируют баги бэкенда
+│   │   └── test_dashboard.py  # currencies, filter/services, statistics, countries, ps; 8 тестов — баги
 │   │
 │   └── ui/                   # UI / E2E тесты
 │       ├── conftest.py        # общие фикстуры: login_page, authenticated_page, скриншоты на падение
@@ -225,7 +227,7 @@ PROC-LK/
 
 ## Покрытие
 
-### API (42 + 27 + 28 = 97 тестов)
+### API (42 + 27 + 28 + 70 = 167 тестов)
 
 | Модуль | Что проверяется |
 |---|---|
@@ -239,6 +241,7 @@ PROC-LK/
 | **Exports** | создание CSV/XLSX, опрос статуса, скачивание, проверка колонок |
 | **Transaction Actions** | возврат, отправка вебхука, запрос статуса — успех и ошибки |
 | **Terminals** | `GET /api/v1/services/{id}/` — структура, типы полей, 404; `PUT` — обновление url/notify/public_name, переключение is_notify, notify_content_type; неаутентифицированный доступ, 404, иммутабельность name |
+| **Dashboard** | `GET /api/v1/services/filters/currencies/` — список валют; `POST /api/v1/transactions/filters/services/` — фильтр терминалов; `GET /api/v1/dashboard/charts/statistics/` — KPI-блоки (count, оборот по валюте); `GET /api/v4/dashboard/charts/countries/` и `charts/ps/` — v4-виджеты (структура, типы полей, success_count, обязательность type) |
 
 ### UI (160 + 75 + 53 = 288 тестов)
 
@@ -282,3 +285,5 @@ PROC-LK/
 | `PUT /api/v1/services/{id}/` | без авторизации → `401` | возвращает `500` |
 | `PUT /api/v1/services/{id}/` | поле `name` иммутабельно (не изменяется) | сервер принимает изменение `name` |
 | `GET /new/terminals/{id}` | открывается форма редактирования терминала | редирект на `/dashboard` (фронтенд не реализован) |
+| `POST /api/v1/transactions/filters/services/` | 200 со списком терминалов по партнёрам | возвращает `405 Method Not Allowed` |
+| `GET /api/v1/dashboard/charts/statistics/` | `{CURRENCY}.tr_success` — денежная строка | возвращает `float` вместо `str` |
