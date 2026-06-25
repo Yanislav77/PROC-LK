@@ -79,6 +79,8 @@ TFA_NO_TFA_USER_PASSWORD=password
 
 ## Запуск тестов
 
+### По маркерам
+
 ```bash
 # все тесты
 pytest
@@ -91,25 +93,111 @@ pytest -m ui
 
 # smoke-набор (быстрая проверка)
 pytest -m smoke
+```
 
-# только TFA-тесты (UI + API, все браузеры)
-pytest tests/ui/test_tfa.py tests/api/test_tfa.py
+### API-тесты — по файлам
 
-# тесты терминалов (API + UI список)
-pytest tests/api/test_terminals.py tests/ui/test_terminals.py::TestTerminalsList
+```bash
+# Авторизация (POST /api/v4/auth/token/)
+pytest tests/api/test_auth.py
 
-# конкретный файл
+# Двухфакторная аутентификация (verify / connect / disable)
+pytest tests/api/test_tfa.py
+
+# Список транзакций, фильтры, payment_method, p2p
+pytest tests/api/test_transactions.py
+
+# Детальная информация о транзакции и история статусов
+pytest tests/api/test_transaction_detail.py
+
+# Действия над транзакцией (возврат, вебхук, запрос статуса)
+pytest tests/api/test_transaction_actions.py
+
+# Терминалы — GET и PUT /api/v1/services/{id}/
+pytest tests/api/test_terminals.py
+
+# Экспорт транзакций (CSV / XLSX)
+pytest tests/api/test_exports.py
+
+# Список терминалов по аккаунту (account/services)
+pytest tests/api/test_account_services.py
+
+# Дашборд (валюты, статистика, страны, платёжные системы)
+pytest tests/api/test_dashboard.py
+```
+
+### UI-тесты — по файлам
+
+```bash
+# Страница логина и выхода
+pytest tests/ui/test_login.py
+
+# Двухфакторная аутентификация (UI): setup, вход с TOTP, полный цикл
+pytest tests/ui/test_tfa.py
+
+# Терминалы: список и форма редактирования
+pytest tests/ui/test_terminals.py
+
+# Только список терминалов (без падающих Edit-тестов)
+pytest tests/ui/test_terminals.py::TestTerminalsList
+
+# Базовые тесты страницы транзакций (загрузка, табы, навигация)
+pytest tests/ui/transactions/test_transactions.py
+
+# Видимость и состояние элементов фильтров
 pytest tests/ui/transactions/test_transactions_filters.py
 
-# конкретный тест
+# Содержимое dropdown-фильтров (статус, метод, режим и т.д.)
+pytest tests/ui/transactions/test_transactions_dropdown_content.py
+
+# Датапикеры (значения по умолчанию, ввод с клавиатуры)
+pytest tests/ui/transactions/test_transactions_date_picker.py
+
+# Применение и сброс фильтров
+pytest tests/ui/transactions/test_transactions_filter_application.py
+
+# Сетевые запросы при смене вкладок и применении фильтров (базовые)
+pytest tests/ui/transactions/test_transactions_filter_network.py
+
+# Сетевые запросы — метод, режим, тип даты (расширенные)
+pytest tests/ui/transactions/test_transactions_filter_network_extended.py
+
+# Заголовки таблицы, данные в строках
+pytest tests/ui/transactions/test_transactions_table_structure.py
+
+# Пагинация (размер страницы, переключение)
+pytest tests/ui/transactions/test_transactions_pagination.py
+
+# Экспорт CSV/XLSX
+pytest tests/ui/transactions/test_transactions_export.py
+
+# Кнопки действий (Запросить статус / Вебхук / Возврат)
+pytest tests/ui/transactions/test_transactions_action_buttons.py
+
+# Страница детализации транзакции
+pytest tests/ui/transactions/test_transactions_detail.py
+```
+
+### Запуск конкретного теста
+
+```bash
 pytest tests/ui/transactions/test_transactions_filters.py::TestFilterControls::test_filter_label_status_visible
+```
+
+### Запуск в одном браузере (быстрее)
+
+По умолчанию UI-тесты прогоняются в трёх браузерах (chromium, firefox, webkit). Чтобы запустить только в одном:
+
+```bash
+pytest -m ui --browser chromium
+pytest tests/ui/test_terminals.py --browser chromium
 ```
 
 ---
 
 ## HTML-отчёт
 
-После каждого прогона автоматически создаётся новый файл в папке `reports/` — единый самодостаточный HTML, который открывается в браузере без сервера.
+После каждого прогона в папке `reports/` автоматически создаётся самодостаточный HTML-файл. Открывается в браузере без сервера, не требует внешних файлов.
 
 Имя файла содержит дату и время запуска:
 ```
@@ -124,12 +212,26 @@ start (Get-ChildItem reports\report_*.html | Sort-Object LastWriteTime | Select-
 open $(ls -t reports/report_*.html | head -1)
 ```
 
-Что есть в отчёте:
-- статус каждого теста (passed / failed / skipped)
-- время выполнения
-- **описание теста** — кликни на строку теста, описание отобразится прямо внутри
-- **скриншот при падении** — тоже встроен в строку теста, без внешних файлов
-- трейс ошибки
+### Что есть в отчёте
+
+| Раздел | Описание |
+|---|---|
+| **Summary** | Общий итог: passed / failed / error, время прогона, окружение |
+| **Results** | Таблица всех тестов с фильтрами по статусу |
+| **Описание теста** | Кликни на строку — раскроется docstring теста |
+| **Трейс ошибки** | Полный traceback прямо в строке упавшего теста |
+| **Скриншот** | При падении UI-теста — скриншот встроен в строку, без внешних файлов |
+| **Environment** | Версии Python, pytest, playwright, платформа |
+
+### Очистить старые отчёты
+
+```bash
+# Windows PowerShell
+Remove-Item reports\report_*.html
+
+# macOS / Linux
+rm reports/report_*.html
+```
 
 ---
 
