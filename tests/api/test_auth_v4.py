@@ -228,15 +228,15 @@ class TestAuthV4Refresh:
         assert r2.status_code == 401
 
     def test_refresh_already_used_token_error_message(self):
-        """Использованный токен возвращает сообщение 'Refresh token already used'."""
+        """Использованный токен возвращает сообщение 'Invalid or expired refresh token'."""
         client = AuthV4Client()
         client.login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
         old_token = client.session.cookies.get("refreshToken")
         assert old_token
         client.refresh()
         r = client.refresh_with_cookie(old_token)
-        assert "Refresh token already used" in str(r.json()), (
-            f"Ожидалось 'Refresh token already used', получено: {r.json()}"
+        assert "Invalid or expired refresh token" in str(r.json()), (
+            f"Ожидалось 'Invalid or expired refresh token', получено: {r.json()}"
         )
 
 
