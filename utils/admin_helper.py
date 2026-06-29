@@ -172,6 +172,8 @@ def create_tfa_enabled_user() -> tuple[str, str, str, int]:
 def delete_user(user_id: int) -> None:
     """Удаляет пользователя по ID через админку.
 
+    Если у текущего admin-аккаунта нет прав на каскадное удаление,
+    деактивирует пользователя (is_active=False) как запасной вариант.
     Запускается в отдельном потоке — вне asyncio-цикла pytest-playwright.
     """
     def _run():
@@ -184,10 +186,30 @@ def delete_user(user_id: int) -> None:
                     page.goto(f"{ADMIN_URL}/core/user/{user_id}/delete/")
                     page.wait_for_load_state("networkidle")
                     _remove_debug_toolbar(page)
-                    page.wait_for_function(
-                        "() => !!document.querySelector('form')", timeout=10000
+
+                    # Проверяем, есть ли форма подтверждения удаления
+                    has_confirm = page.evaluate(
+                        "() => !!document.querySelector('input[name=\"post\"]')"
                     )
-                    page.evaluate("document.querySelector('form').submit()")
+                    if has_confirm:
+                        page.evaluate(
+                            "() => document.querySelector('input[name=\"post\"]').closest('form').submit()"
+                        )
+                        page.wait_for_load_state("networkidle")
+                        return
+
+                    # Нет прав на каскадное удаление — деактивируем пользователя
+                    import warnings
+                    warnings.warn(
+                        f"delete_user({user_id}): нет прав на удаление, деактивируем (is_active=False)"
+                    )
+                    page.goto(f"{ADMIN_URL}/core/user/{user_id}/change/")
+                    page.wait_for_load_state("networkidle")
+                    _remove_debug_toolbar(page)
+                    cb = page.locator("input[name=is_active]")
+                    if cb.is_checked():
+                        cb.uncheck()
+                    page.locator("input[name=_save]").click()
                     page.wait_for_load_state("networkidle")
                 finally:
                     browser.close()
